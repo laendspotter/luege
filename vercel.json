@@ -1,12 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "public/**", "use": "@vercel/static" }
-  ],
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/game", "dest": "/public/game.html" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+    { "src": "/game", "dest": "/game.html" },
+    { "src": "/(.*)", "dest": "/$1" }
   ]
 }
