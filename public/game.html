@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lüge — Spiel</title>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0c0c0c; --surface: #161616; --surface2: #1f1f1f;
+  --border: #2e2e2e; --border2: #3d3d3d;
+  --text: #f2f2f2; --text2: #888; --text3: #444;
+  --red: #e63946; --red-dark: #7a1a22; --red-bg: #160609;
+  --green: #2ecc71; --green-bg: #071a0e; --green-dark: #0f5c2e;
+  --amber: #f4a261;
+  --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+body {
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  min-height: 100vh; max-width: 520px; margin: 0 auto;
+  padding: 1rem 1rem 3rem; display: flex; flex-direction: column; gap: 0.7rem;
+}
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0; }
+.logo { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.03em; }
+.logo em { color: var(--red); font-style: normal; }
+.badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 0.28rem 0.65rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; color: var(--text2); }
+.sec-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text3); margin-bottom: 0.3rem; }
+.log { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem 1rem; font-size: 0.85rem; color: var(--text2); text-align: center; min-height: 2.5rem; line-height: 1.5; }
+.pile-row { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.65rem 1rem; }
+.pile-count { font-size: 1.5rem; font-weight: 900; }
+.pile-sub { font-size: 0.7rem; color: var(--text3); margin-top: 0.1rem; }
+.claim-tag { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 0.28rem 0.6rem; font-size: 0.78rem; color: var(--text2); }
+.claim-tag.live { border-color: var(--amber); color: var(--amber); }
+.luge-btn { background: var(--red-bg); border: 1px solid var(--red-dark); border-radius: 12px; color: var(--red); cursor: pointer; font-family: var(--font); font-size: 1rem; font-weight: 700; padding: 0.8rem; text-align: center; transition: opacity 0.15s, transform 0.1s; display: none; }
+.luge-btn.show { display: block; }
+.luge-btn:hover { opacity: 0.8; }
+.luge-btn:active { transform: scale(0.98); }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px,1fr)); gap: 0.45rem; }
+.pcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.55rem 0.7rem; }
+.pcard.active { border-color: var(--green); }
+.pcard.me { border-color: var(--red-dark); }
+.pcard .pname { font-weight: 700; font-size: 0.8rem; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.15rem; }
+.pcard.active .pname { color: var(--green); }
+.pcard.me .pname { color: var(--red); }
+.pcard .pcnt { font-size: 0.72rem; color: var(--text3); }
+.hand-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.75rem; }
+.hand-chips { display: flex; flex-wrap: wrap; gap: 0.38rem; margin-top: 0.5rem; }
+.chip { background: var(--surface2); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 700; min-width: 38px; padding: 0.38rem 0.5rem; text-align: center; transition: border-color 0.12s, background 0.12s; user-select: none; color: var(--text2); }
+.chip.joker { color: var(--amber); border-color: #3a2800; background: #130e00; }
+.chip.sel { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+.chip.joker.sel { background: #1a1100; border-color: var(--amber); color: var(--amber); }
+.play-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.75rem; flex-direction: column; gap: 0.6rem; display: none; }
+.play-box.show { display: flex; }
+.claim-row { display: flex; align-items: center; gap: 0.5rem; }
+.claim-row label { font-size: 0.75rem; color: var(--text3); white-space: nowrap; }
+.num-inp { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--font); font-size: 0.9rem; font-weight: 700; outline: none; padding: 0.38rem 0.5rem; text-align: center; width: 58px; transition: border-color 0.12s; }
+.num-inp:focus { border-color: var(--red); }
+.val-grid { display: flex; flex-wrap: wrap; gap: 0.32rem; }
+.vbtn { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; color: var(--text2); cursor: pointer; font-family: var(--font); font-size: 0.8rem; font-weight: 700; padding: 0.32rem 0.52rem; transition: border-color 0.1s, color 0.1s; }
+.vbtn.act { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+.vbtn.jok.act { border-color: var(--amber); color: var(--amber); background: #1a1100; }
+.play-btn { background: var(--green-bg); border: 1px solid var(--green-dark); border-radius: 10px; color: var(--green); cursor: pointer; font-family: var(--font); font-size: 0.9rem; font-weight: 700; padding: 0.7rem; text-align: center; transition: opacity 0.15s, transform 0.1s; }
+.play-btn:hover { opacity: 0.8; }
+.play-btn:active { transform: scale(0.98); }
+.play-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+#overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); align-items: center; justify-content: center; z-index: 100; }
+#overlay.show { display: flex; }
+.win-box { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 2rem 2.5rem; text-align: center; max-width: 300px; width: 90%; display: flex; flex-direction: column; gap: 0.5rem; }
+.win-emoji { font-size: 2.8rem; }
+.win-name { font-size: 1.6rem; font-weight: 900; letter-spacing: -0.02em; color: var(--green); }
+.win-sub { font-size: 0.82rem; color: var(--text2); margin-bottom: 0.5rem; }
+.back-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); cursor: pointer; font-family: var(--font); font-size: 0.85rem; font-weight: 700; padding: 0.65rem; transition: border-color 0.15s; }
+.back-btn:hover { border-color: var(--border2); }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div class="win-box">
+    <div class="win-emoji">🏆</div>
+    <div class="win-name" id="win-name"></div>
+    <div class="win-sub">hat alle karten losgeworden!</div>
+    <button class="back-btn" onclick="location.href='/'">zurück zur lobby</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="logo">LÜ<em>GE</em></div>
+  <div class="badge" id="room-badge">----</div>
+</div>
+
+<div class="log" id="log">verbinde...</div>
+
+<div>
+  <div class="sec-label">ablagestapel</div>
+  <div class="pile-row">
+    <div>
+      <div class="pile-sub">karten im stapel</div>
+      <div class="pile-count" id="pile-count">0</div>
+    </div>
+    <div class="claim-tag" id="claim-tag">kein claim</div>
+  </div>
+</div>
+
+<button class="luge-btn" id="luge-btn">🚨 lüge! aufdecken</button>
+
+<div>
+  <div class="sec-label">spieler</div>
+  <div class="pgrid" id="pgrid"></div>
+</div>
+
+<div class="hand-box">
+  <div class="sec-label">deine karten (<span id="hand-count">0</span>)</div>
+  <div class="hand-chips" id="hand-chips"></div>
+</div>
+
+<div class="play-box" id="play-box">
+  <div class="sec-label">was behauptest du?</div>
+  <div class="claim-row">
+    <label>anzahl:</label>
+    <input class="num-inp" type="number" id="claim-count" min="1" max="10" value="1" />
+    <label>wert:</label>
+  </div>
+  <div class="val-grid" id="val-grid"></div>
+  <button class="play-btn" id="play-btn" disabled>karten ablegen</button>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const PUSHER_KEY     = 'DEIN_PUSHER_KEY';      // gleicher wert wie index.html
+const PUSHER_CLUSTER = 'DEIN_PUSHER_CLUSTER';
+
+// ─── SESSION ─────────────────────────────────────────────────────────────────
+const myId     = sessionStorage.getItem('lg_id');
+const myName   = sessionStorage.getItem('lg_name');
+const roomCode = sessionStorage.getItem('lg_room');
+if (!myId || !roomCode) location.href = '/';
+
+document.getElementById('room-badge').textContent = roomCode;
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let myHand = [], selected = new Set(), claimVal = 1;
+
+// ─── PUSHER ──────────────────────────────────────────────────────────────────
+const pusher = new Pusher(PUSHER_KEY, {
+  cluster: PUSHER_CLUSTER,
+  authEndpoint: '/api/pusher-auth',
+  auth: { params: { playerId: myId } },
+});
+
+// public room channel — receives game state
+const roomChannel = pusher.subscribe(`room-${roomCode}`);
+roomChannel.bind('state', applyState);
+
+// private hand channel — receives my cards only
+const handChannel = pusher.subscribe(`private-hand-${roomCode}-${myId}`);
+handChannel.bind('hand', data => applyHand(data.cards));
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function apiAction(action, extra = {}) {
+  const r = await fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, roomCode, playerId: myId, ...extra }),
+  });
+  const res = await r.json();
+  if (res.err) document.getElementById('log').textContent = '⚠ ' + res.err;
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+function applyState(s) {
+  if (s.phase !== 'playing') return;
+
+  document.getElementById('log').textContent = s.lastAction ?? '...';
+  document.getElementById('pile-count').textContent = s.pile;
+
+  const ct = document.getElementById('claim-tag');
+  if (s.lastClaim) {
+    const v = s.lastClaim.value === 0 ? 'Joker' : s.lastClaim.value;
+    ct.textContent = `${s.lastClaim.count}× ${v}`;
+    ct.className = 'claim-tag live';
+  } else {
+    ct.textContent = 'kein claim';
+    ct.className = 'claim-tag';
+  }
+
+  const lb = document.getElementById('luge-btn');
+  lb.className = 'luge-btn' + (s.lastClaim && s.lastClaim.playerId !== myId && !s.winner ? ' show' : '');
+
+  document.getElementById('pgrid').innerHTML = s.players.map(p => {
+    const cls = ['pcard', p.id === s.currentTurn ? 'active' : '', p.id === myId ? 'me' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}"><div class="pname">${p.name}${p.id === myId ? ' (du)' : ''}</div><div class="pcnt">${p.cardCount} karten</div></div>`;
+  }).join('');
+
+  document.getElementById('play-box').className = 'play-box' + (s.currentTurn === myId && !s.winner ? ' show' : '');
+
+  if (s.winner) {
+    document.getElementById('win-name').textContent = s.players.find(p => p.id === s.winner)?.name ?? '???';
+    document.getElementById('overlay').className = 'show';
+  }
+}
+
+function applyHand(cards) {
+  myHand = cards;
+  selected.clear();
+  renderHand();
+  updatePlayBtn();
+}
+
+// ─── HAND ─────────────────────────────────────────────────────────────────────
+function renderHand() {
+  const el = document.getElementById('hand-chips');
+  document.getElementById('hand-count').textContent = myHand.length;
+  if (!myHand.length) { el.innerHTML = '<span style="color:var(--text3);font-size:.82rem">keine karten 🎉</span>'; return; }
+  const sorted = [...myHand].sort((a, b) => a.isJoker - b.isJoker || a.value - b.value);
+  el.innerHTML = sorted.map(c => {
+    const cls = ['chip', c.isJoker ? 'joker' : '', selected.has(c.id) ? 'sel' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" data-id="${c.id}">${c.isJoker ? '★' : c.value}</div>`;
+  }).join('');
+  el.querySelectorAll('.chip').forEach(el => el.addEventListener('click', () => {
+    selected.has(el.dataset.id) ? selected.delete(el.dataset.id) : selected.add(el.dataset.id);
+    renderHand(); updatePlayBtn();
+    document.getElementById('claim-count').value = selected.size || 1;
+  }));
+}
+
+function buildValGrid() {
+  const grid = document.getElementById('val-grid');
+  grid.innerHTML = [1,2,3,4,5,6,7,8,9,10,'J'].map(v => {
+    const isJ = v === 'J', num = isJ ? 0 : v;
+    const cls = ['vbtn', isJ ? 'jok' : '', num === claimVal ? 'act' : ''].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-val="${num}">${isJ ? '★' : v}</button>`;
+  }).join('');
+  grid.querySelectorAll('.vbtn').forEach(b => b.addEventListener('click', () => {
+    claimVal = parseInt(b.dataset.val); buildValGrid();
+  }));
+}
+buildValGrid();
+
+function updatePlayBtn() {
+  document.getElementById('play-btn').disabled = selected.size === 0;
+}
+
+// ─── ACTIONS ─────────────────────────────────────────────────────────────────
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (!selected.size) return;
+  apiAction('play_cards', {
+    cardIds: [...selected],
+    claimValue: claimVal,
+    claimCount: parseInt(document.getElementById('claim-count').value) || selected.size,
+  });
+  selected.clear();
+});
+
+document.getElementById('luge-btn').addEventListener('click', () => apiAction('call_luge'));
+</script>
+</body>
+</html>

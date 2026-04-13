@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lüge</title>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0c0c0c; --surface: #161616; --surface2: #1f1f1f;
+  --border: #2e2e2e; --border2: #3d3d3d;
+  --text: #f2f2f2; --text2: #888; --text3: #444;
+  --red: #e63946; --red-dark: #7a1a22; --red-bg: #160609;
+  --green: #2ecc71; --green-dark: #0f5c2e;
+  --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+body {
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 2rem 1rem;
+}
+.logo { font-size: clamp(3rem,12vw,5rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1; margin-bottom: 0.2rem; }
+.logo em { color: var(--red); font-style: normal; }
+.sub { font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text3); margin-bottom: 2.5rem; }
+.panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  padding: 1.75rem; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 0.7rem;
+}
+.plabel { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text3); }
+input {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); font-family: var(--font); font-size: 1rem;
+  padding: 0.7rem 0.9rem; outline: none; transition: border-color 0.15s; width: 100%;
+}
+input::placeholder { color: var(--text3); }
+input:focus { border-color: var(--red); }
+#room-input { text-transform: uppercase; letter-spacing: 0.2em; font-weight: 700; }
+.btn {
+  background: var(--red); border: none; border-radius: 10px; color: #fff;
+  cursor: pointer; font-family: var(--font); font-size: 0.9rem; font-weight: 700;
+  padding: 0.75rem; transition: opacity 0.15s, transform 0.1s; width: 100%;
+}
+.btn:hover { opacity: 0.85; }
+.btn:active { transform: scale(0.98); }
+.btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+.btn.ghost:hover { border-color: var(--border2); color: var(--text); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.sep { display: flex; align-items: center; gap: 0.75rem; color: var(--text3); font-size: 0.72rem; }
+.sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.status { font-size: 0.78rem; color: var(--text3); text-align: center; min-height: 1.1em; }
+.status.err { color: var(--red); }
+.status.ok { color: var(--green); }
+#lobby { display: none; }
+.code-box { background: var(--red-bg); border: 1px solid var(--red-dark); border-radius: 12px; padding: 1rem; text-align: center; }
+.code-box .clabel { font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--red); margin-bottom: 0.3rem; }
+.code-box .code { font-size: 2.4rem; font-weight: 900; letter-spacing: 0.3em; }
+.players-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 0.9rem; min-height: 70px; }
+.players-box .blabel { font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-bottom: 0.5rem; }
+.prow { display: flex; align-items: center; gap: 0.45rem; padding: 0.22rem 0; font-size: 0.86rem; color: var(--text2); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+.prow.host { color: var(--text); }
+.prow.host .dot { background: var(--green); }
+.prow.me { color: var(--red); }
+.prow.me .dot { background: var(--red); }
+#wait-label { font-size: 0.78rem; color: var(--text3); text-align: center; display: none; }
+</style>
+</head>
+<body>
+<div class="logo">LÜ<em>GE</em></div>
+<div class="sub">das bluffspiel · bis 10 spieler</div>
+
+<div class="panel" id="setup">
+  <div class="plabel">mitmachen oder neu erstellen</div>
+  <input type="text" id="name-input" placeholder="dein name" maxlength="20" autocomplete="off" />
+  <input type="text" id="room-input" placeholder="RAUMCODE" maxlength="4" autocomplete="off" />
+  <button class="btn" id="join-btn">raum beitreten</button>
+  <div class="sep">oder</div>
+  <button class="btn ghost" id="create-btn">neuen raum erstellen</button>
+  <div class="status" id="setup-status"></div>
+</div>
+
+<div class="panel" id="lobby">
+  <div class="code-box">
+    <div class="clabel">raumcode — teile ihn mit anderen</div>
+    <div class="code" id="code-display">----</div>
+  </div>
+  <div class="players-box">
+    <div class="blabel">spieler (<span id="pcount">0</span>/10)</div>
+    <div id="plist"></div>
+  </div>
+  <button class="btn" id="start-btn" style="display:none" disabled>spiel starten</button>
+  <div id="wait-label">warte auf den host...</div>
+  <div class="status" id="lobby-status"></div>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+// PUSHER_KEY aus deinem Pusher-Dashboard (öffentlicher key, kein secret)
+const PUSHER_KEY    = 'DEIN_PUSHER_KEY';
+const PUSHER_CLUSTER = 'DEIN_PUSHER_CLUSTER'; // z.B. 'eu' oder 'mt1'
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let myId = null, myName = '', isHost = false, roomCode = '';
+
+function genId() { return Math.random().toString(36).slice(2, 10); }
+function setStatus(id, msg, cls = '') {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function renderLobby(state) {
+  const players = state.players ?? [];
+  document.getElementById('pcount').textContent = players.length;
+  document.getElementById('plist').innerHTML = players.map(p => {
+    const cls = ['prow', p.isHost ? 'host' : '', p.id === myId ? 'me' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}"><div class="dot"></div>${p.name}${p.id === myId ? ' (du)' : ''}${p.isHost ? ' 👑' : ''}</div>`;
+  }).join('');
+
+  const startBtn = document.getElementById('start-btn');
+  const waitLabel = document.getElementById('wait-label');
+  if (isHost) {
+    startBtn.style.display = 'block';
+    startBtn.disabled = players.length < 2;
+    waitLabel.style.display = 'none';
+  } else {
+    startBtn.style.display = 'none';
+    waitLabel.style.display = 'block';
+  }
+}
+
+// ─── PUSHER ──────────────────────────────────────────────────────────────────
+let pusher = null, channel = null;
+
+function connectPusher(code) {
+  pusher = new Pusher(PUSHER_KEY, {
+    cluster: PUSHER_CLUSTER,
+    authEndpoint: '/api/pusher-auth',
+    auth: { params: { playerId: myId } },
+  });
+
+  channel = pusher.subscribe(`room-${code}`);
+  channel.bind('state', state => {
+    if (state.phase === 'lobby') {
+      renderLobby(state);
+    } else if (state.phase === 'playing') {
+      sessionStorage.setItem('lg_id', myId);
+      sessionStorage.setItem('lg_name', myName);
+      sessionStorage.setItem('lg_host', isHost ? '1' : '0');
+      sessionStorage.setItem('lg_room', roomCode);
+      window.location.href = '/game';
+    }
+  });
+}
+
+// ─── API CALLS ───────────────────────────────────────────────────────────────
+async function apiJoin(create) {
+  const body = { playerId: myId, playerName: myName };
+  if (create) body.create = true;
+  else body.roomCode = roomCode;
+
+  const r = await fetch('/api/join', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+async function apiAction(action, extra = {}) {
+  const r = await fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, roomCode, playerId: myId, ...extra }),
+  });
+  return r.json();
+}
+
+function showLobby(code) {
+  roomCode = code;
+  document.getElementById('code-display').textContent = code;
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+document.getElementById('room-input').addEventListener('input', function () {
+  this.value = this.value.toUpperCase().replace(/[^A-Z]/g, '');
+});
+
+document.getElementById('create-btn').addEventListener('click', async () => {
+  myName = document.getElementById('name-input').value.trim();
+  if (!myName) { setStatus('setup-status', 'gib deinen namen ein.', 'err'); return; }
+  myId = genId(); isHost = true;
+  const res = await apiJoin(true);
+  if (res.err) { setStatus('setup-status', res.err, 'err'); return; }
+  showLobby(res.roomCode);
+  connectPusher(res.roomCode);
+  renderLobby(res.state);
+});
+
+document.getElementById('join-btn').addEventListener('click', async () => {
+  myName = document.getElementById('name-input').value.trim();
+  const code = document.getElementById('room-input').value.trim().toUpperCase();
+  if (!myName) { setStatus('setup-status', 'gib deinen namen ein.', 'err'); return; }
+  if (code.length !== 4) { setStatus('setup-status', 'raumcode = 4 zeichen.', 'err'); return; }
+  myId = genId(); isHost = false; roomCode = code;
+  const res = await apiJoin(false);
+  if (res.err) { setStatus('setup-status', res.err, 'err'); return; }
+  showLobby(code);
+  connectPusher(code);
+  renderLobby(res.state);
+});
+
+document.getElementById('start-btn').addEventListener('click', async () => {
+  const res = await apiAction('start_game');
+  if (res.err) setStatus('lobby-status', res.err, 'err');
+});
+</script>
+</body>
+</html>
