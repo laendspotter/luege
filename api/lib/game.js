@@ -1,10 +1,48 @@
-// In-memory store — works fine for Vercel serverless (room state fits in one function instance
-// since pusher triggers keep the same instance warm per room in practice).
-// For production scale: swap this with Vercel KV (one line change).
+const { kv } = require('@vercel/kv');
 
-const rooms = global._luegeRooms ?? (global._luegeRooms = new Map());
+async function getRoom(code) {
+  return await kv.get(`room:${code}`);
+}
 
-// ─── DECK ────────────────────────────────────────────────────────────────────
+async function saveRoom(room) {
+  await kv.set(`room:${room.code}`, room, { ex: 3600 }); // 1h TTL
+}
+
+async function createRoom(code, hostId, hostName) {
+  const room = {
+    code,
+    phase: 'lobby',
+    players: [{ id: hostId, name: hostName, isHost: true, cardCount: 0 }],
+    hands: {},
+    discardPile: [],
+    currentTurn: null,
+    pile: 0,
+    lastClaim: null,
+    lastAction: null,
+    winner: null,
+  };
+  await saveRoom(room);
+  return room;
+}
+
+function publicState(room) {
+  return {
+    phase: room.phase,
+    players: room.players,
+    currentTurn: room.currentTurn,
+    pile: room.pile,
+    lastClaim: room.lastClaim,
+    lastAction: room.lastAction,
+    winner: room.winner,
+  };
+}
+
+function joinRoom(room, playerId, playerName) {
+  if (room.players.find(p => p.id === playerId)) return { ok: true };
+  if (room.players.length >= 10) return { ok: false, err: 'Raum voll (max. 10 Spieler).' };
+  room.players.push({ id: playerId, name: playerName, isHost: false, cardCount: 0 });
+  return { ok: true };
+}
 
 function makeDeck() {
   const deck = [];
@@ -25,62 +63,9 @@ function shuffle(arr) {
   return a;
 }
 
-function dealCards(playerIds) {
-  const deck = shuffle(makeDeck());
-  const hands = {};
-  playerIds.forEach((id, i) => {
-    hands[id] = deck.slice(i * 10, (i + 1) * 10);
-  });
-  return hands;
-}
-
 function nextPlayer(players, currentId) {
   const idx = players.findIndex(p => p.id === currentId);
   return players[(idx + 1) % players.length].id;
-}
-
-// ─── ROOM HELPERS ────────────────────────────────────────────────────────────
-
-function getRoom(code) {
-  return rooms.get(code) ?? null;
-}
-
-function createRoom(code, hostId, hostName) {
-  const room = {
-    code,
-    phase: 'lobby',
-    players: [{ id: hostId, name: hostName, isHost: true, cardCount: 0 }],
-    hands: {},
-    discardPile: [],
-    currentTurn: null,
-    pile: 0,
-    lastClaim: null,
-    lastAction: null,
-    winner: null,
-  };
-  rooms.set(code, room);
-  return room;
-}
-
-function publicState(room) {
-  return {
-    phase: room.phase,
-    players: room.players,
-    currentTurn: room.currentTurn,
-    pile: room.pile,
-    lastClaim: room.lastClaim,
-    lastAction: room.lastAction,
-    winner: room.winner,
-  };
-}
-
-// ─── ACTIONS ─────────────────────────────────────────────────────────────────
-
-function joinRoom(room, playerId, playerName) {
-  if (room.players.find(p => p.id === playerId)) return { ok: true }; // already in
-  if (room.players.length >= 10) return { ok: false, err: 'Raum voll (max. 10 Spieler).' };
-  room.players.push({ id: playerId, name: playerName, isHost: false, cardCount: 0 });
-  return { ok: true };
 }
 
 function startGame(room, callerId) {
@@ -88,7 +73,11 @@ function startGame(room, callerId) {
   if (!caller?.isHost) return { ok: false, err: 'Nur der Host kann starten.' };
   if (room.players.length < 2) return { ok: false, err: 'Mindestens 2 Spieler nötig.' };
 
-  room.hands = dealCards(room.players.map(p => p.id));
+  const deck = shuffle(makeDeck());
+  room.hands = {};
+  room.players.forEach((p, i) => {
+    room.hands[p.id] = deck.slice(i * 10, (i + 1) * 10);
+  });
   room.discardPile = [];
   room.phase = 'playing';
   room.currentTurn = room.players[0].id;
@@ -150,13 +139,11 @@ function callLuge(room, callerId) {
   room.lastClaim = null;
   room.currentTurn = loser;
 
-  if (wasLying) {
-    room.lastAction = `✅ ${callerName} hatte recht! ${liarName} nimmt die Karten.`;
-  } else {
-    room.lastAction = `❌ ${callerName} lag falsch! Nimmt die Karten.`;
-  }
+  room.lastAction = wasLying
+    ? `✅ ${callerName} hatte recht! ${liarName} nimmt die Karten.`
+    : `❌ ${callerName} lag falsch! Nimmt die Karten.`;
 
   return { ok: true };
 }
 
-module.exports = { getRoom, createRoom, publicState, joinRoom, startGame, playCards, callLuge };
+module.exports = { getRoom, saveRoom, createRoom, publicState, joinRoom, startGame, playCards, callLuge };
